@@ -5,13 +5,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title STATLockUp
 /// @notice This contract allows users to lock up STAT tokens for a specified duration.
 /// @dev Implements token lockup functionality with EIP-712 signature verification.
-contract STATLockUp is EIP712, ReentrancyGuard, Ownable, Pausable {
+contract STATLockUp is ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
 
     IERC20 public token;
@@ -28,39 +27,16 @@ contract STATLockUp is EIP712, ReentrancyGuard, Ownable, Pausable {
     /// @param _lockupAmount The required amount of STAT tokens to lock up.
     /// @param _lockupDurationDays The duration of the lockup in days.
     constructor(address _token, uint256 _lockupAmount, uint256 _lockupDurationDays) 
-        EIP712("STATLockUp", "1") Ownable(msg.sender) {
+        Ownable(msg.sender) {
         token = IERC20(_token);
         requiredLockupAmount = _lockupAmount;
         lockupDuration = _lockupDurationDays * 1 days; // Convert days to seconds
     }
 
     /// @notice Initiates a lockup for the caller's tokens.
-    /// @param deadline The deadline timestamp by which the permit must be submitted.
-    /// @param v The recovery byte of the signature.
-    /// @param r Half of the ECDSA signature pair.
-    /// @param s Half of the ECDSA signature pair.
     function statLockup(
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
     ) external nonReentrant whenNotPaused {
-        require(block.timestamp <= deadline, "Permit: expired deadline");
         require(lockedUpAmounts[msg.sender] == 0, "Already locked up");
-
-        // Reconstruct the message hash
-        bytes32 structHash = keccak256(abi.encode(
-            keccak256("Permit(address from,uint256 value,uint256 deadline)"),
-            msg.sender,
-            requiredLockupAmount,
-            deadline
-        ));
-        bytes32 digest = _hashTypedDataV4(structHash);
-
-        // Verify the signature
-        address signer = ECDSA.recover(digest, v, r, s);
-
-        require(signer == msg.sender, "Invalid signature");
 
         // Transfer tokens
         require(token.transferFrom(msg.sender, address(this), requiredLockupAmount), "Transfer failed");
