@@ -134,6 +134,17 @@ contract Wallet is IAccount, ReentrancyGuard {
      */
     function transferToLockUp(address lockupContract) external nonReentrant {
         require(msg.sender == entryPoint || msg.sender == owner, "Not authorized");
+        require(lockupContract != address(0), "Invalid lockup contract");
+        require(lockupContract.code.length > 0, "Lockup contract must be a contract");
+        
+        // 추가 보안: lockupContract가 실제 STATLockUp인지 검증
+        // tokenRegistry 주소를 확인
+        try STATLockUp(lockupContract).tokenRegistry() returns (address contractTokenRegistry) {
+            require(contractTokenRegistry == tokenRegistry, "Token registry mismatch");
+        } catch {
+            revert("Invalid STATLockUp contract");
+        }
+        
         uint256 amount = STATLockUp(lockupContract).requiredLockupAmount();
         address token = TokenRegistry(tokenRegistry).getToken();
         require(token != address(0), "Invalid token address");
@@ -171,6 +182,8 @@ contract Wallet is IAccount, ReentrancyGuard {
             (bool success, ) = address(targets[i]).call{value: values[i]}(datas[i]);
             if (!success) {
                 emit TransactionFailed(targets[i], datas[i]);
+            } else {
+                emit Executed(targets[i], datas[i]);
             }
         }
     }

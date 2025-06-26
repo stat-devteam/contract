@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
@@ -16,6 +17,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  */
 contract RewardDistributor is Pausable, ReentrancyGuard {
     using ECDSA for bytes32;
+    using SafeERC20 for IERC20;
 
     IERC20 public rewardToken;
     address public owner;
@@ -42,7 +44,7 @@ contract RewardDistributor is Pausable, ReentrancyGuard {
 
     constructor(address _rewardToken) {
         require(_rewardToken != address(0), "Invalid token address");
-        require(msg.sender != address(0), "Invalid owner address");
+        require(_rewardToken.code.length > 0, "Token must be a contract");
         rewardToken = IERC20(_rewardToken);
         owner = msg.sender;
     }
@@ -68,7 +70,7 @@ contract RewardDistributor is Pausable, ReentrancyGuard {
 
         lastClaimedNonce[msg.sender] = nonce;
 
-        require(rewardToken.transfer(msg.sender, amount), "Transfer failed");
+        rewardToken.safeTransfer(msg.sender, amount);
         emit RewardClaimed(msg.sender, amount, nonce, block.timestamp);
     }
 
@@ -78,7 +80,7 @@ contract RewardDistributor is Pausable, ReentrancyGuard {
     function withdraw(address to, uint256 amount) external {
         require(msg.sender == owner, "Only owner can withdraw");
         require(to != address(0), "Invalid address");
-        require(rewardToken.transfer(to, amount), "Transfer failed");
+        rewardToken.safeTransfer(to, amount);
     }
 
     function pause() external {
@@ -111,6 +113,8 @@ contract RewardDistributor is Pausable, ReentrancyGuard {
     function updateRewardToken(address newToken) external {
         require(msg.sender == owner, "Only owner can update token");
         require(newToken != address(0), "Invalid token address");
+        require(newToken.code.length > 0, "Token must be a contract");
+        require(newToken != address(rewardToken), "Same token address");
         
         address oldToken = address(rewardToken);
         rewardToken = IERC20(newToken);
@@ -151,7 +155,6 @@ contract RewardDistributor is Pausable, ReentrancyGuard {
      */
     function blacklistUsers(address[] calldata users, bool isBlacklisted) external {
         require(msg.sender == owner, "Only owner can blacklist");
-        require(users.length <= 100, "Too many users at once");
         for (uint256 i = 0; i < users.length; i++) {
             blacklistedUsers[users[i]] = isBlacklisted;
             emit UserBlacklisted(users[i], isBlacklisted);
